@@ -1,15 +1,17 @@
 #!/bin/sh
 #
-# Minimum init for headless servers. Assumes ~fresh Debian 12+ (for now) / not run over ssh. POSIX
+# Minimum init for headless Fedora Server 43+. Not run over ssh. ~POSIX
 # - Adds GitHub SSH keys
 # - Harden sshd:
 #   - Disable password / root login
-#   - Changes SSH port
-# - Sets up UFW and Fail2ban
-#   - '--http' to allow HTTP/S ports in UFW
+#   - Changes SSH port (with SELinux labeling)
+# - Sets up firewalld and Fail2ban
+#   - '--http' to allow HTTP/S ports in firewalld
+#   - '--cockpit' to allow Cockpit web console (port 9090). Skip this for security critical stuff.
+# - Enables user lingering for systemd user services
 #
 # Example:
-#   curl -fsSL https://raw.githubusercontent.com/Data-Corruption/tool/main/i.sh | sudo sh -s -- -g Data-Corruption -p 22 --http
+#   curl -fsSL https://raw.githubusercontent.com/Data-Corruption/tools/main/i/Fed.sh | sudo sh -s -- -g Data-Corruption -p 22 --http --cockpit
 
 set -eu
 umask 077
@@ -18,6 +20,7 @@ TARGET_USER=""
 GITHUB_USER=""
 SSH_PORT=22
 ALLOW_HTTP=0
+ALLOW_COCKPIT=0
 cat <<'EOF'
  _____     ______     ______   ______    
 /\  __-.  /\  __ \   /\__  _\ /\  __ \   
@@ -40,6 +43,7 @@ while [ $# -gt 0 ]; do
     -g) GITHUB_USER="$2"; shift 2 ;;
     -p) SSH_PORT="$2"; shift 2 ;;
     --http) ALLOW_HTTP=1; shift ;;
+    --cockpit) ALLOW_COCKPIT=1; shift ;;
     *) dief "Unknown arg: %s" "$1" ;;
   esac
 done
@@ -51,7 +55,7 @@ TARGET_USER=${TARGET_USER:-${SUDO_USER-}}
 [ "$(id -u)" -eq 0 ] || dief "Please run with sudo."
 [ -n "$TARGET_USER" ] || dief "Error determining user."
 [ -n "$GITHUB_USER" ] || dief "Missing -g <github_user>"
-[ -f /etc/debian_version ] || dief "This script only runs on Debian."
+[ -f /etc/fedora-release ] || dief "This script only runs on Fedora."
 [ -n "${SSH_CONNECTION-}" ] && dief "Refusing to run over SSH (console only)."
 id "$TARGET_USER" >/dev/null 2>&1 || dief "Error: user '%s' does not exist." "$TARGET_USER"
 
@@ -88,9 +92,7 @@ trap cleanup_tmp EXIT
 
 # Main ------------------------------------------------------------------------
 
-export DEBIAN_FRONTEND=noninteractive
-apt-get update || dief "apt-get update failed"
-apt-get install -y curl openssh-server ufw fail2ban ca-certificates || dief "apt-get install failed"
+dnf install -y curl openssh-server firewalld fail2ban ca-certificates policycoreutils-python-utils || dief "dnf install failed"
 
 # ---- Install GitHub SSH keys
 
@@ -149,7 +151,7 @@ sync; mv -f "$tmp_out" "$auth_keys"
 
 # ---- Harden sshd
 
-sshd_main="/etc/ssh/sshd_config"
+sshd_main="/etc/ssh/sshd_config"f
 sshd_dir="/etc/ssh/sshd_config.d"
 sshd_dropin="${sshd_dir}/99-bootstrap.conf"
 
@@ -163,24 +165,46 @@ PermitRootLogin no
 EOF
 chmod 644 "$sshd_dropin"
 
-if ! sshd -t -f "$sshd_main"; then
-  dief "sshd configuration test failed"
+# ---- SELinux port labeling for custom SSH port
+
+if command -v semanage >/dev/null 2>&1 && [ "$SSH_PORT" -ne 22 ]; then
+  semanage port -a -t ssh_port_t -p tcp "$SSH_PORT" 2>/dev/null || \
+  semanage port -m -t ssh_port_t -p tcp "$SSH_PORT" 2>/dev/null || {
+    rc=$?
+    dief "Failed to label SSH port %d for SELinux (rc=%d). sshd will not start." "$SSH_PORT" "$rc"
+  }
 fi
 
-systemctl enable ssh || { rc=$?; dief "Failed to enable ssh (rc=%d)" "$rc"; }
-systemctl restart ssh || { rc=$?; dief "Failed to restart ssh (rc=%d)" "$rc"; }
+sshd -t || dief "sshd configuration test failed"
+sshd -T | grep -q "^port $SSH_PORT$" || dief "sshd not using port %s" "$SSH_PORT"
 
-# ---- UFW setup
+systemctl enable sshd || { rc=$?; dief "Failed to enable sshd (rc=%d)" "$rc"; }
+systemctl restart sshd || { rc=$?; dief "Failed to restart sshd (rc=%d)" "$rc"; }
 
-ufw --force reset || { rc=$?; dief "ufw reset failed (rc=%d)" "$rc"; }
-ufw default deny incoming
-ufw default allow outgoing
-ufw allow "${SSH_PORT}/tcp" comment 'SSH'
+# ---- firewalld setup
+
+systemctl enable firewalld || { rc=$?; dief "Failed to enable firewalld (rc=%d)" "$rc"; }
+systemctl start firewalld || { rc=$?; dief "Failed to start firewalld (rc=%d)" "$rc"; }
+
+# Allow SSH (custom port or default service)
+if [ "$SSH_PORT" -ne 22 ]; then
+  # Remove default ssh service and add custom port
+  firewall-cmd --permanent --remove-service=ssh 2>/dev/null || true
+  firewall-cmd --permanent --add-port="${SSH_PORT}/tcp" || { rc=$?; dief "firewalld add ssh port failed (rc=%d)" "$rc"; }
+else
+  firewall-cmd --permanent --add-service=ssh || { rc=$?; dief "firewalld add ssh failed (rc=%d)" "$rc"; }
+fi
+
 if [ "$ALLOW_HTTP" -eq 1 ]; then
-    ufw allow http
-    ufw allow https
+  firewall-cmd --permanent --add-service=http || { rc=$?; dief "firewalld add http failed (rc=%d)" "$rc"; }
+  firewall-cmd --permanent --add-service=https || { rc=$?; dief "firewalld add https failed (rc=%d)" "$rc"; }
 fi
-ufw --force enable || { rc=$?; dief "ufw enable failed (rc=%d)" "$rc"; }
+
+if [ "$ALLOW_COCKPIT" -eq 1 ]; then
+  firewall-cmd --permanent --add-service=cockpit || { rc=$?; dief "firewalld add cockpit failed (rc=%d)" "$rc"; }
+fi
+
+firewall-cmd --reload || { rc=$?; dief "firewalld reload failed (rc=%d)" "$rc"; }
 
 # ---- Fail2ban minimal jail
 
@@ -195,6 +219,7 @@ port     = ${SSH_PORT}
 maxretry = 5
 bantime  = 1h
 findtime = 10m
+banaction = firewallcmd-rich-rules
 EOF
 chmod 644 "$fail2ban_dropin"
 
@@ -203,15 +228,37 @@ systemctl restart fail2ban || { rc=$?; dief "Failed to restart fail2ban (rc=%d)"
 sleep 0.5
 fail2ban-client ping >/dev/null 2>&1 || dief "Fail2ban not responding"
 
+# ---- Enable user lingering (for systemd user services without login)
+
+linger_file="/var/lib/systemd/linger/$TARGET_USER"
+if [ ! -f "$linger_file" ]; then
+  loginctl enable-linger "$TARGET_USER" || {
+    printf 'Warning: Failed to enable lingering for %s. User services may not start on boot.\n' "$TARGET_USER" >&2
+  }
+fi
+
 # ---- Summary
 
 printf '\nInit complete.\n'
 printf '  - GitHub keys: total=%s, added=%s, duplicates=%s\n' \
   "$total_git_keys" "$added_key_count" "$dup_key_count"
 printf '  - SSH ready: ssh -p %s %s@<server-ip>\n' "$SSH_PORT" "$TARGET_USER"
-if [ "$ALLOW_HTTP" -eq 1 ]; then
-  printf '  - UFW active: allowing HTTP/HTTPS.\n'
+if [ "$SSH_PORT" -ne 22 ]; then
+  printf '  - SELinux: port %d labeled as ssh_port_t.\n' "$SSH_PORT"
+fi
+printf '  - firewalld active'
+if [ "$ALLOW_HTTP" -eq 1 ] && [ "$ALLOW_COCKPIT" -eq 1 ]; then
+  printf ': allowing HTTP/HTTPS, Cockpit.\n'
+elif [ "$ALLOW_HTTP" -eq 1 ]; then
+  printf ': allowing HTTP/HTTPS.\n'
+elif [ "$ALLOW_COCKPIT" -eq 1 ]; then
+  printf ': allowing Cockpit.\n'
 else
-  printf '  - UFW active.\n'
+  printf '.\n'
 fi
 printf '  - Fail2ban sshd jail active.\n'
+if [ -f "$linger_file" ]; then
+  printf '  - User lingering enabled for %s.\n' "$TARGET_USER"
+else
+  printf '  - Warning: User lingering not enabled.\n'
+fi
