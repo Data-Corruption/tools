@@ -243,7 +243,6 @@ fi
 # ---- Shell QOL (optional)
 
 if [ "${SHELL_QOL:-0}" -eq 1 ]; then
-  # includes amdgpu_top cause my box has an amd gpu
   dnf install -y \
     bash-completion \
     tmux \
@@ -251,10 +250,8 @@ if [ "${SHELL_QOL:-0}" -eq 1 ]; then
     ripgrep \
     tealdeer \
     btop \
+    nvtop \
     || dief "dnf install (shell-min) failed"
-
-  dnf install -y amdgpu_top 2>/dev/null || \
-  printf 'Note: amdgpu_top not available on this Fedora release; skipping.\n' >&2
 
   profile_dropin="/etc/profile.d/99-shell-min.sh"
   cat >"$profile_dropin" <<'EOF'
@@ -329,7 +326,7 @@ else
 fi
 if [ "${SHELL_QOL:-0}" -eq 1 ]; then
   printf '  - Shell (minimal QoL): enabled\n'
-  printf '    - Packages: tmux ncdu bash-completion ripgrep tealdeer btop amdgpu_top\n'
+  printf '    - Packages: tmux ncdu bash-completion ripgrep tealdeer btop nvtop\n'
   printf '    - Defaults: extended history, EDITOR=nano (if unset), basic aliases\n'
   printf '    - Prompt: subtle user@host color (only if no existing customization)\n'
 fi

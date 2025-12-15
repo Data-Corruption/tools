@@ -224,6 +224,7 @@ if [ "${SHELL_QOL:-0}" -eq 1 ]; then
     ripgrep \
     tldr \
     btop \
+    nvtop \
     || dief "apt-get install (shell-min) failed"
 
   profile_dropin="/etc/profile.d/99-shell-min.sh"
@@ -290,7 +291,7 @@ else
 fi
 if [ "${SHELL_QOL:-0}" -eq 1 ]; then
   printf '  - Shell (minimal QoL): enabled\n'
-  printf '    - Packages: tmux ncdu bash-completion ripgrep tldr btop\n'
+  printf '    - Packages: tmux ncdu bash-completion ripgrep tldr btop nvtop\n'
   printf '    - Defaults: extended history, EDITOR=nano (if unset), basic aliases\n'
   printf '    - Prompt: subtle user@host color (only if no existing customization)\n'
 fi
