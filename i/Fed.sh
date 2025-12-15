@@ -7,6 +7,7 @@
 #   - Changes SSH port (with SELinux labeling)
 # - Sets up firewalld and Fail2ban
 #   - '--http' to allow HTTP/S ports in firewalld
+#   - '--shell' to install basic QoL tools
 #   - '--cockpit' to allow Cockpit web console (port 9090). Skip this for security critical stuff.
 # - Enables user lingering for systemd user services
 #
@@ -21,6 +22,7 @@ GITHUB_USER=""
 SSH_PORT=22
 ALLOW_HTTP=0
 ALLOW_COCKPIT=0
+SHELL_QOL=0
 cat <<'EOF'
  _____     ______     ______   ______    
 /\  __-.  /\  __ \   /\__  _\ /\  __ \   
@@ -43,6 +45,7 @@ while [ $# -gt 0 ]; do
     -g) GITHUB_USER="$2"; shift 2 ;;
     -p) SSH_PORT="$2"; shift 2 ;;
     --http) ALLOW_HTTP=1; shift ;;
+    --shell) SHELL_QOL=1; shift ;;
     --cockpit) ALLOW_COCKPIT=1; shift ;;
     *) dief "Unknown arg: %s" "$1" ;;
   esac
@@ -151,7 +154,7 @@ sync; mv -f "$tmp_out" "$auth_keys"
 
 # ---- Harden sshd
 
-sshd_main="/etc/ssh/sshd_config"f
+sshd_main="/etc/ssh/sshd_config"
 sshd_dir="/etc/ssh/sshd_config.d"
 sshd_dropin="${sshd_dir}/99-bootstrap.conf"
 
@@ -237,6 +240,66 @@ if [ ! -f "$linger_file" ]; then
   }
 fi
 
+# ---- Shell QOL (optional)
+
+if [ "${SHELL_QOL:-0}" -eq 1 ]; then
+  dnf install -y \
+    bash-completion \
+    git \
+    tmux \
+    ncdu \
+    ripgrep \
+    tealdeer \
+    btop \
+    amdgpu_top \
+    || dief "dnf install (shell-min) failed"
+
+  profile_dropin="/etc/profile.d/99-shell-min.sh"
+  cat >"$profile_dropin" <<'EOF'
+# managed-by-data-init: minimal interactive shell defaults
+# Applies to interactive shells only.
+case $- in *i*) ;; *) return ;; esac
+
+# History: bigger + timestamped + less duplication
+export HISTSIZE=50000
+export HISTFILESIZE=100000
+export HISTTIMEFORMAT='%F %T '
+export HISTCONTROL=ignoreboth:erasedups
+
+# Editor default (do not override user choice)
+: "${EDITOR:=nano}"
+
+# Safe convenience aliases
+alias ll='ls -alF'
+alias la='ls -A'
+alias ..='cd ..'
+
+# Optional: lightly colorize user@host in purple for bash, only if prompt isn't already customized.
+# Tries hard not to stomp on existing fancy prompts.
+if [ -n "${BASH_VERSION-}" ]; then
+  # If PS1 already contains ANSI escapes or bracketed escapes, assume it's customized.
+  case "${PS1-}" in
+    *$'\033['*|*'\'\['*|*'\\['*|*'\e['*) : ;;
+    *)
+      # Only do this when terminal likely supports color
+      if command -v tput >/dev/null 2>&1; then
+        cols=$(tput colors 2>/dev/null || echo 0)
+      else
+        cols=0
+      fi
+      if [ "${cols:-0}" -ge 8 ]; then
+        # Purple user@host, rest default-ish
+        PS1='\[\033[35m\]\u@\h\[\033[0m\]:\w\$ '
+        export PS1
+      fi
+    ;;
+  esac
+fi
+EOF
+  chmod 644 "$profile_dropin" || true
+fi
+
+
 # ---- Summary
 
 printf '\nInit complete.\n'
@@ -261,4 +324,10 @@ if [ -f "$linger_file" ]; then
   printf '  - User lingering enabled for %s.\n' "$TARGET_USER"
 else
   printf '  - Warning: User lingering not enabled.\n'
+fi
+if [ "${SHELL_QOL:-0}" -eq 1 ]; then
+  printf '  - Shell (minimal QoL): enabled\n'
+  printf '    - Packages: git tmux ncdu bash-completion ripgrep tealdeer btop amdgpu_top\n'
+  printf '    - Defaults: extended history, EDITOR=nano (if unset), basic aliases\n'
+  printf '    - Prompt: subtle user@host color (only if no existing customization)\n'
 fi

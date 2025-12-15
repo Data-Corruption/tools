@@ -1,15 +1,21 @@
 {
     "cSpell.words": [
+        "amdgpu",
         "banaction",
         "bantime",
+        "btop",
         "dropin",
+        "erasedups",
         "findtime",
         "firewallcmd",
         "firewalld",
+        "ignoreboth",
         "inblk",
         "maxretry",
+        "ncdu",
         "policycoreutils",
         "redir",
-        "semanage"
+        "semanage",
+        "tealdeer"
     ]
 }

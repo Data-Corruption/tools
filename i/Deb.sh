@@ -6,7 +6,6 @@
 #   - Disable password / root login
 #   - Changes SSH port
 # - Sets up UFW and Fail2ban
-# - Enables user lingering for systemd user services
 #   - '--http' to allow HTTP/S ports in UFW
 # - Enables user lingering for systemd user services
 #
