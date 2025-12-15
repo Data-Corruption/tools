@@ -154,7 +154,6 @@ sync; mv -f "$tmp_out" "$auth_keys"
 
 # ---- Harden sshd
 
-sshd_main="/etc/ssh/sshd_config"
 sshd_dir="/etc/ssh/sshd_config.d"
 sshd_dropin="${sshd_dir}/99-bootstrap.conf"
 
@@ -243,9 +242,9 @@ fi
 # ---- Shell QOL (optional)
 
 if [ "${SHELL_QOL:-0}" -eq 1 ]; then
+  # includes amdgpu_top cause my box has an amd gpu
   dnf install -y \
     bash-completion \
-    git \
     tmux \
     ncdu \
     ripgrep \
@@ -327,7 +326,7 @@ else
 fi
 if [ "${SHELL_QOL:-0}" -eq 1 ]; then
   printf '  - Shell (minimal QoL): enabled\n'
-  printf '    - Packages: git tmux ncdu bash-completion ripgrep tealdeer btop amdgpu_top\n'
+  printf '    - Packages: tmux ncdu bash-completion ripgrep tealdeer btop amdgpu_top\n'
   printf '    - Defaults: extended history, EDITOR=nano (if unset), basic aliases\n'
   printf '    - Prompt: subtle user@host color (only if no existing customization)\n'
 fi
