@@ -247,6 +247,7 @@ if [ "${SHELL_QOL:-0}" -eq 1 ]; then
     bash-completion \
     tmux \
     ncdu \
+    micro \
     ripgrep \
     tealdeer \
     btop \
@@ -266,7 +267,7 @@ export HISTTIMEFORMAT='%F %T '
 export HISTCONTROL=ignoreboth:erasedups
 
 # Editor default (do not override user choice)
-: "${EDITOR:=nano}"
+: "${EDITOR:=micro}"
 
 # Safe convenience aliases
 alias ll='ls -alF'
@@ -323,6 +324,6 @@ fi
 if [ "${SHELL_QOL:-0}" -eq 1 ]; then
   printf '  - Shell (minimal QoL): enabled\n'
   printf '    - Packages: tmux ncdu bash-completion ripgrep tealdeer btop nvtop\n'
-  printf '    - Defaults: extended history, EDITOR=nano (if unset), basic aliases\n'
+  printf '    - Defaults: extended history, EDITOR=micro (if unset), basic aliases\n'
   printf '    - Prompt: subtle user@host color (only if no existing customization)\n'
 fi

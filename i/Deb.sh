@@ -221,6 +221,7 @@ if [ "${SHELL_QOL:-0}" -eq 1 ]; then
     bash-completion \
     tmux \
     ncdu \
+    micro \
     ripgrep \
     tldr \
     btop \
@@ -240,29 +241,25 @@ export HISTTIMEFORMAT='%F %T '
 export HISTCONTROL=ignoreboth:erasedups
 
 # Editor default (do not override user choice)
-: "${EDITOR:=nano}"
+: "${EDITOR:=micro}"
 
 # Safe convenience aliases
 alias ll='ls -alF'
 alias la='ls -A'
 alias ..='cd ..'
 
-# Optional: lightly colorize user@host in purple for bash, only if prompt isn't already customized.
-# Tries hard not to stomp on existing fancy prompts.
+# Cause i wanna be a little cute dammit
 if [ -n "${BASH_VERSION-}" ]; then
-  # If PS1 already contains ANSI escapes or bracketed escapes, assume it's customized.
   case "${PS1-}" in
-    *$'\033['*|*'\'\['*|*'\\['*|*'\e['*) : ;;
+    *'\\['*) : ;;  # already customized (has readline escapes)
     *)
-      # Only do this when terminal likely supports color
       if command -v tput >/dev/null 2>&1; then
         cols=$(tput colors 2>/dev/null || echo 0)
       else
         cols=0
       fi
       if [ "${cols:-0}" -ge 8 ]; then
-        # Purple user@host, rest default-ish
-        PS1='\[\033[35m\]\u@\h\[\033[0m\]:\w\$ '
+        PS1='\[\033[35m\]\u\[\033[90m\]@\h\[\033[0m\]:\w\$ '
         export PS1
       fi
     ;;
@@ -292,6 +289,6 @@ fi
 if [ "${SHELL_QOL:-0}" -eq 1 ]; then
   printf '  - Shell (minimal QoL): enabled\n'
   printf '    - Packages: tmux ncdu bash-completion ripgrep tldr btop nvtop\n'
-  printf '    - Defaults: extended history, EDITOR=nano (if unset), basic aliases\n'
+  printf '    - Defaults: extended history, EDITOR=micro (if unset), basic aliases\n'
   printf '    - Prompt: subtle user@host color (only if no existing customization)\n'
 fi
