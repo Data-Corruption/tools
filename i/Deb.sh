@@ -11,7 +11,7 @@
 # - Enables user lingering for systemd user services
 #
 # Example:
-#   curl -fsSL https://raw.githubusercontent.com/Data-Corruption/tools/main/i/Deb.sh | sudo sh -s -- -g Data-Corruption -p 22 --http
+#   curl -fsSL https://raw.githubusercontent.com/Data-Corruption/tools/main/i/Deb.sh | sudo sh -s -- -g Data-Corruption -p 22 --http --shell
 
 set -eu
 umask 077
