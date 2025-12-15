@@ -96,6 +96,7 @@ trap cleanup_tmp EXIT
 # Main ------------------------------------------------------------------------
 
 dnf install -y curl openssh-server firewalld fail2ban ca-certificates policycoreutils-python-utils || dief "dnf install failed"
+dnf -y makecache || dief "dnf makecache failed"
 
 # ---- Install GitHub SSH keys
 
@@ -250,8 +251,10 @@ if [ "${SHELL_QOL:-0}" -eq 1 ]; then
     ripgrep \
     tealdeer \
     btop \
-    amdgpu_top \
     || dief "dnf install (shell-min) failed"
+
+  dnf install -y amdgpu_top 2>/dev/null || \
+  printf 'Note: amdgpu_top not available on this Fedora release; skipping.\n' >&2
 
   profile_dropin="/etc/profile.d/99-shell-min.sh"
   cat >"$profile_dropin" <<'EOF'
